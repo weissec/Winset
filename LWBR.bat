@@ -3,15 +3,15 @@ SETLOCAL enableextensions
 TITLE Local Build Enumeration Tool
 :: This script attempt to retrieve some useful information from the system and domain
 ECHO =================================================
-ECHO         Local Build Enumeration Script
+ECHO          Local Windows Build Reviewer
 ECHO =================================================
 ECHO.
 echo Starting enumeration for:
 hostname
 ECHO.
-MKDIR BuildInfo
-ECHO [+] Created folder "BuildInfo"
-CD BuildInfo
+MKDIR LWBR-Results
+ECHO [+] Created folder "LWBR-Results"
+CD LWBR-Results
 ECHO [+] Started [ %date% - %time% ]
 ECHO.
 
@@ -32,9 +32,8 @@ powershell Get-ExecutionPolicy >> Powershell-Policy.txt
 ECHO.
 
 ECHO Checking for insecure services..
-ECHO [!] Please save the results manually
 :: Insecure services / unquoted paths
-wmic service get name,displayname,pathname,startmode |findstr /i "auto" |findstr /i /v "c:\windows\\" |findstr /i /v """
+wmic /OUTPUT:"Insecure-Services.txt" service get name,displayname,pathname,startmode |findstr /i "auto" |findstr /i /v "c:\windows\\" |findstr /i /v """
 ECHO.
 ECHO Checking Registry..
 :: Registry entries with "reg"
