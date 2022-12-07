@@ -3,7 +3,7 @@
 Simple script built in PoweShell and DOS to aid in Windows Build Reviews. 
 Works on most Windows and Windows Server versions.
 
-####Retrieves the following information:
+#### Retrieves the following information:
 - System Information
 - Windows Patches
 - Network Shares
