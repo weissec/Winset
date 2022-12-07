@@ -1,10 +1,10 @@
 @ECHO OFF
 SETLOCAL enableextensions
-TITLE Local Windows Build Reviewer
+TITLE Wiset - Windows System Enumeration Tool
 
 :: This script attempt to retrieve some useful information from the system and domain
 ECHO =================================================
-ECHO          Local Windows Build Reviewer
+ECHO      Wiset - Windows System Enumeration Tool
 ECHO =================================================
 :: Check if running as admin
 openfiles >nul 2>&1
@@ -18,9 +18,9 @@ for /f "tokens=4-6 delims=. " %%g in ('ver') do set VERSION=%%g.%%h.%%i
 echo Windows Version: %version%
 ECHO.
 
-MKDIR LWBR-Results
-ECHO [+] Created folder "LWBR-Results"
-CD LWBR-Results
+MKDIR Wiset-Results
+ECHO [+] Created folder "Wiset-Results"
+CD Wiset-Results
 ECHO [+] Started [ %date% - %time% ]
 ECHO.
 
