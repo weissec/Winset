@@ -4,8 +4,8 @@ Simple script built in PoweShell and DOS to aid in Windows Build Reviews.
 Works on most Windows and Windows Server versions.
 
 #### PowerShell Version Main Functionalities:
-- retrieves System, Users, Privileges, Network, Storage, Files, Domain information
-- Results are included in an HTML Report
+- retrieves System details, Users, Privileges, Network, Storage, Files, Domain and other information.
+- Results are saved in a unique HTML Report for ease of transfer and use.
 
 Usage:
 ```
