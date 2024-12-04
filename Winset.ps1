@@ -177,6 +177,9 @@ function Run-Actions {
     }
 }
 
+# Check if running PowerShell as Administrator
+[bool] $isadmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+
 # If part of a Domain, run Domain actions
 if ((gwmi win32_computersystem).partofdomain -eq $true) {
 	write-host '[+] Host is part of a Domain: Adding Domain checks..'
@@ -192,9 +195,6 @@ if ($isadmin -eq $true) {
 } else {
 	write-host '[+] Standard User Privileges Detected: Removing administrative checks..'
 }
-
-# Check if running PowerShell as Administrator
-[bool] $isadmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
 # Start HTML Report
 Add-Content -Path $OutputFile -Value @"
