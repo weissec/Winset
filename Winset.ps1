@@ -117,9 +117,6 @@ $extended_actions = @{
 	'Files containing word "passwords"' = 'Get-ChildItem c:\* -include *.xml,*.ini,*.txt,*.config -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.PSPath -notlike "*C:\temp*" -and $_.PSParentPath -notlike "*Reference Assemblies*" -and $_.PSParentPath -notlike "*Windows Kits*"}| Select-String -Pattern "password"';
 }
 
-# Add Section here to run if Administrator only
-# Need to add an IF statement to catch this..
-
 $admin_actions = @{
 	'BitLocker Status' = 'Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, EncryptionMethod';
 	'Windows Defender Exclusions' = 'Get-MpPreference | Select-Object -Property ExclusionPath -ExpandProperty ExclusionPath';
@@ -189,6 +186,16 @@ if ((gwmi win32_computersystem).partofdomain -eq $true) {
 	[bool] $addomain = $false
 }
 
+# If Admin, let user know about additional checks
+if ($isadmin -eq $true) {
+	write-host '[+] Administrative Priviliges Detected: Adding additional checks..'
+} else {
+	write-host '[+] Standard User Privileges Detected: Removing administrative checks..'
+}
+
+# Check if running PowerShell as Administrator
+[bool] $isadmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+
 # Start HTML Report
 Add-Content -Path $OutputFile -Value @"
 <!doctypehtml><meta content='text/html; charset=utf-8'http-equiv=Content-Type><title>Winset - System Report</title><style>body{margin:0 auto;background:#1e2830;font-family:sans-serif;font-size:15px;height:100vh;}.siteheader{color:#fff;padding-left:20px;padding-right:20px;display:flex;justify-content:space-between;margin-bottom:0;vertical-align:center}.flexcontainer{display:flex;flex-direction:row}#left-panel{overflow-x:hidden;overflow-y:scroll;height:90vh;background:#1e2830;display:flex;flex-direction:column;align-self:flex-start;width:20%;min-width:250px}.linksection{color:#3cc792;padding-top:15px}.linksection h3{color:#fff;padding-left:15px}#links{flex:1}#right-panel{background:#3cc792;display:flex;flex-grow:1}.right-content{padding-left:60px;color:#1e2830;padding-top:30px;width:95%}.right-content h1{margin:0 auto;font-weight:100;padding-bottom:30px}.right-content pre{white-space:pre-wrap;background-color:#f2fffc;width:90%;padding:18px;overflow-x: hidden;max-height:60vh;}#top-title{padding-top:20px;color:#3cc792;align-self:center;text-align:center;padding-bottom:25px}#top-title h1{text-align:center;font-size:45px;margin-bottom:0;font-weight:100}.left-item{display:flex;align-self:auto;color:#3cc792;background:#363b40;padding-top:15px;padding-bottom:15px;cursor:pointer;text-decoration:none;width:100%;padding-left:20px;margin-bottom:2px}.left-item:hover,.select{background:#3cc792;color:#1e2830;font-weight:700}.general{font-weight:700;font-size:16px}.show{display:flex;width:100%}.hide{display:none}#info{margin:0 auto;width:100%}#info h1{font-weight:100}.tile{display:block;width:100%;padding-top:20px;padding-bottom:20px;margin-bottom:5px}.tile p{margin-top:0;margin-bottom:0}td{padding-right:50px}th{text-align:left;padding-bottom:10px;padding-right:100px}#info span{font-weight:bold;margin-right:50px;width:250px;display:inline-block}</style><div class=siteheader><h3>Windows System Enumeratio Tool (Winset) Report</h3><h4>Version: 1.0 (2024)</h4></div><div class=flexcontainer><div id=left-panel><div id=links><a class='left-item select'data=info href=#>Report Details</a>
@@ -205,10 +212,16 @@ Add-Content -Path $OutputFile -Value "</div><div class='linksection'><h3>Network
 Prepare-Actions -ActionsGroup $network_actions -FilePath $OutputFile
 Add-Content -Path $OutputFile -Value "</div><div class='linksection'><h3>Storage Devices:</h3>" # Storage
 Prepare-Actions -ActionsGroup $storage_actions -FilePath $OutputFile
+
 if ($addomain -eq $true) {
 	Add-Content -Path $OutputFile -Value "</div><div class='linksection'><h3>Domain Information:</h3>" # Domain
 	Prepare-Actions -ActionsGroup $domain_actions -FilePath $OutputFile	
 } # Only add domain section if AD detected
+
+if ($isadmin -eq $true) {
+	Add-Content -Path $OutputFile -Value "</div><div class='linksection'><h3>Privileged Checks:</h3>" # Admin
+	Prepare-Actions -ActionsGroup $admin_actions -FilePath $OutputFile	
+} # Only add admin section if running as admin
 
 # Conditionally prepare optional actions (full parameter)
 if ($Full) {
@@ -232,9 +245,14 @@ Run-Actions -ActionsGroup $user_actions -FilePath $OutputFile
 Run-Actions -ActionsGroup $priviliges_actions -FilePath $OutputFile
 Run-Actions -ActionsGroup $network_actions -FilePath $OutputFile
 Run-Actions -ActionsGroup $storage_actions -FilePath $OutputFile
+
 if ($addomain -eq $true) {
 	Run-Actions -ActionsGroup $domain_actions -FilePath $OutputFile
 } # Only run domain actions if AD detected
+
+if ($isadmin -eq $true) {
+	Run-Actions -ActionsGroup $admin_actions -FilePath $OutputFile
+} # Only run admin if administrator prompt
 
 if ($Full) {
     Run-Actions -ActionsGroup $extended_actions -FilePath $OutputFile
