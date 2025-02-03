@@ -63,7 +63,7 @@ ECHO [Done] Retrieved Disk Encryption status
 wmic logicaldisk get volumename,name >> Disks.txt
 
 :: Insecure services / unquoted paths
-wmic /OUTPUT:"Insecure-Services.txt" service get name,displayname,pathname,startmode |findstr /i "auto" |findstr /i /v "c:\windows\\" |findstr /i /v """
+wmic /OUTPUT:"Insecure-Services.txt" service get name,displayname,pathname,startmode |findstr /i "auto" |findstr /i /v "c:\windows\\" |findstr /i /v '"'
 ECHO [Done] Retrieved list of potential insecure services (unquoted paths)
 for /f "tokens=2 delims='='" %%b in ('wmic service list full^|find /i "pathname"^|find /i /v "system32"') do echo %%b | findstr "\\" >> Third-Party-Services.txt
 ECHO [Done] Retrieved list of third party services
