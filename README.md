@@ -11,8 +11,10 @@ Usage:
 ```
 Standard Usage: .\Winset.ps1
 Specify Output File: .\Winset.ps1 -OutputFile "D:\logs\report.html" (default: "C:\temp\winset-report.html")
-Run Extended Checks: .\Winset.ps1 -Full 
+Run Extended Checks: .\Winset.ps1 -Full
 ```
+
+**Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error (based on system settings). As a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file created on the target device.
 
 ### Batch Version:
 - Retrieves the following:
