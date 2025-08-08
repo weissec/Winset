@@ -8,11 +8,19 @@ Works on most Windows and Windows Server versions.
 - Results saved in the following formats: HTML, CSV, JSON.
 
 #### Usage:
-See help information: `Get-Help .\Winset.ps1`  
-Standard usage: `.\Winset.ps1`  
-Specify output: `.\Winset.ps1 -OutputFile "D:\logs\reportname"` (default: "C:\temp\")(extensions are added automatically)  
-Specify different output format: `.\Winset.ps1 -OutputFormat CSV`  
-Run extended checks: `.\Winset.ps1 -Full`  
+```
+\\ See help information:
+Get-Help .\Winset.ps1
+
+\\ Standard usage:
+.\Winset.ps1 
+
+\\ Specify output:
+.\Winset.ps1 -OutputFile "D:\logs\reportname" (default: "C:\temp\")(extensions are added automatically)  
+
+\\ Run extended checks:
+.\Winset.ps1 -Full
+```
 
 > [!TIP]
 > **Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error due to the lack of a trusted signature (depending on system settings). On restricted environments with limited permissions, as a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file on the target device.
