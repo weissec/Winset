@@ -15,8 +15,8 @@ Specify output file: .\Winset.ps1 -OutputFile "D:\logs\report.html" (default: "C
 Specify different output format: .\Winset.ps1 -OutputFormat CSV
 Run extended checks: .\Winset.ps1 -Full
 ```
-
-**Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error (based on system settings). As a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file created on the target device.
+> [!TIP]
+> **Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error (based on system settings). As a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file created on the target device.
 
 ### Batch Version:
 - Retrieves the following:
