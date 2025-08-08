@@ -16,7 +16,7 @@ Specify different output format: .\Winset.ps1 -OutputFormat CSV
 Run extended checks: .\Winset.ps1 -Full
 ```
 > [!TIP]
-> **Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error (based on system settings). As a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file created on the target device.
+> **Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error due to the lack of a trusted signature (depending on system settings). On restricted environments with limited permissions, as a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file on the target device.
 
 ### Batch Version:
 - Retrieves the following:
