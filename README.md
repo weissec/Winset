@@ -5,12 +5,12 @@ Works on most Windows and Windows Server versions.
 
 ### PowerShell Version:
 - Retrieves system details, user details and privileges, network information, storage details, interesting files and AD/AzureAD information.
-- Results can be saved in the following formats: HTML, CSV, JSON (default: HTML).
+- Results saved in the following formats: HTML, CSV, JSON.
 
 #### Usage:
 See help information: `Get-Help .\Winset.ps1`  
 Standard usage: `.\Winset.ps1`  
-Specify output file: `.\Winset.ps1 -OutputFile "D:\logs\report.html"` (default: "C:\temp\winset_report.html")  
+Specify output: `.\Winset.ps1 -OutputFile "D:\logs\reportname"` (default: "C:\temp\")(extensions are added automatically)  
 Specify different output format: `.\Winset.ps1 -OutputFormat CSV`  
 Run extended checks: `.\Winset.ps1 -Full`  
 
