@@ -4,14 +4,16 @@ Simple script built in PoweShell and DOS to aid in Windows Build Reviews.
 Works on most Windows and Windows Server versions.
 
 ### PowerShell Version:
-- retrieves System details, Users, Privileges, Network, Storage, Files, Domain and other information.
-- Results are saved in a unique HTML Report for ease of transfer and use.
+- Retrieves system details, user details and privileges, network information, storage details, interesting files and AD/AzureAD information.
+- Results can be saved in the following formats: HTML, CSV, JSON (default: HTML).
 
-Usage:
+#### Usage:
 ```
-Standard Usage: .\Winset.ps1
-Specify Output File: .\Winset.ps1 -OutputFile "D:\logs\report.html" (default: "C:\temp\winset-report.html")
-Run Extended Checks: .\Winset.ps1 -Full
+See help information: Get-Help .\Winset.ps1
+Standard usage: .\Winset.ps1
+Specify output file: .\Winset.ps1 -OutputFile "D:\logs\report.html" (default: "C:\temp\winset_report.html")
+Specify different output format: .\Winset.ps1 -OutputFormat CSV
+Run extended checks: .\Winset.ps1 -Full
 ```
 
 **Execution Policy:** when downloaded from Github directly, it is likely that the script will trigger an execution policy error (based on system settings). As a potential bypass, try copy the raw code from the script and paste in a newly created .PS1 file created on the target device.
