@@ -6,6 +6,7 @@ Works on most Windows and Windows Server versions.
 ### PowerShell Version:
 - Retrieves system details, user details and privileges, network information, storage details, interesting files and AD/AzureAD information.
 - Results saved in the following formats: HTML, CSV, JSON.
+- Severity: currently the Severity is associated specifically with potential impact of each check and not the actual results. Manual verification is required to determine if a security issue exists.
 
 #### Usage:
 ```
