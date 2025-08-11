@@ -86,6 +86,7 @@ function Export-CsvReport {
             'Check',
             'Status',
 			'Timestamp',
+			'Severity',
             @{Name='Output';Expression={$_.Output -replace "`r`n"," | " -replace "`n"," | "}}
         )
         
@@ -116,132 +117,223 @@ Write-Host -fore green " _ _ _ _ ___ _ _____ _____ _____ "
 Write-Host -fore green "| | | | |   | |  ___|  ___|_   _|"
 Write-Host -fore green "| | | | | | | |___  |  ___| | |  "
 Write-Host -fore green "|_____|_|_|___|_____|_____| |_| " 
-Write-Host -fore green "`nWindows System Enumeration Tool (v.0.2)"
+Write-Host -fore green "`nWindows System Enumeration Tool (v.0.3)"
 
 read-host "`nPress ENTER to start the scan or CTRL + C to exit"
 Write-Host "[+] Checking local host, please wait.."
 
 # Define action groups with system commands to execute
-<#
-$test_actions = @{
-    'Failing Test 1' = 'Get-Item NonExistentFile.txt' 
-    'Failing Test 2' = 'Stop-Service NonExistentService'
-}
-#>
 
 $system_actions = @{
-    'System Info' = 'systeminfo';
-    # Another fallback OS version: 'OS Version' = '(Get-WmiObject -Class Win32_OperatingSystem).Caption';
-	'Operating System Version' = 'Get-ItemProperty "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\" | fl';
-    'Environment Variables' = 'Get-ChildItem Env:';
-	'PowerShell Execution Policy' = 'Get-ExecutionPolicy -List';
-	'Searching for SAM backup files' = 'Test-Path %SYSTEMROOT%\repair\SAM ; Test-Path %SYSTEMROOT%\system32\config\regback\SAM';
-    'Running Processes' = 'gwmi -Query "Select * from Win32_Process" | where {$_.Name -notlike "svchost*"} | Select Name, Handle, @{Label="Owner";Expression={$_.GetOwner().User}}';
-    'Installed Software Directories' = 'Get-ChildItem "C:\Program Files", "C:\Program Files (x86)" | Select-Object Parent,Name,LastWriteTime';
-    'Software in Registry' = 'Get-ChildItem -path Registry::HKEY_LOCAL_MACHINE\SOFTWARE | Select-Object Name';
-	'Scheduled Tasks' = 'Get-ScheduledTask | where {$_.TaskPath -notlike "\Microsoft*"} | Select-Object TaskName,TaskPath,State';
-    'Startup Commands' = 'Get-CimInstance Win32_StartupCommand | select Name, command, Location, User';
-	'List of Services' = 'Get-WmiObject Win32_Service | Where-Object { $_.StartName -eq "LocalSystem" } | Select-Object Name, State, StartMode';
-	'Services Running as SYSTEM' = 'Get-WmiObject Win32_Service | Where-Object { $_.StartName -eq "LocalSystem" } | Select-Object Name, State, StartMode';
-	'Windows Defender Status' = 'Get-MpComputerStatus | fl';
-	'Antivirus Software in Use' = 'wmic /Namespace:\\root\SecurityCenter2 Path AntiVirusProduct Get displayname | Select-Object -Skip 1'
-	'Windows Hotfixes' = 'Get-HotFix | select-object Hotfixid,description,installedon';
-	# Another fallback Hotfixes: 'Get-WmiObject -query "select * from win32_quickfixengineering" | foreach {$_.hotfixid}';
+	'System Info' = @{ Command = { systeminfo }; Severity = 'Info' }
+    # Another fallback OS version: (Get-WmiObject -Class Win32_OperatingSystem).Caption
+	'Operating System Version' = @{ Command = { Get-ItemProperty "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\" | Format-List }; Severity = 'Info' }
+    'Environment Variables' = @{ Command = { Get-ChildItem Env: }; Severity = 'Info' }
+	'PowerShell Execution Policy' = @{ Command = { Get-ExecutionPolicy -List}; Severity = 'Medium' }
+	'Searching for SAM backup files' = @{ Command = {
+        $paths = @(
+            "$env:SYSTEMROOT\repair\SAM",
+            "$env:SYSTEMROOT\system32\config\regback\SAM"
+        )
+
+        foreach ($path in $paths) {
+            [PSCustomObject]@{
+                Path    = $path
+                Exists  = Test-Path $path
+            }
+        }
+    }; Severity = 'High' }
+    'Running Processes' = @{ Command = { gwmi -Query "Select * from Win32_Process" | where {$_.Name -notlike "svchost*"} | Select Name, Handle, @{Label="Owner";Expression={$_.GetOwner().User}} }; Severity = 'Info' }
+    'Installed Software Directories' = @{ Command = { Get-ChildItem "C:\Program Files", "C:\Program Files (x86)" | Select-Object Parent,Name,LastWriteTime }; Severity = 'Info' }
+    'Software in Registry' = @{ Command = { Get-ChildItem -path Registry::HKEY_LOCAL_MACHINE\SOFTWARE | Select-Object Name }; Severity = 'Info' }
+	'Scheduled Tasks' = @{ Command = { Get-ScheduledTask | where {$_.TaskPath -notlike "\Microsoft*"} | Select-Object TaskName,TaskPath,State }; Severity = 'Low' }
+    'Automatic Startup Programs' = @{ Command = { Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location, User }; Severity = 'Info' }
+	'List of Services' = @{ Command = { Get-WmiObject Win32_Service | Where-Object { $_.StartName -eq "LocalSystem" } | Select-Object Name, State, StartMode }; Severity = 'Info' }
+	'Services Running as SYSTEM' = @{ Command = { Get-WmiObject Win32_Service | Where-Object { $_.StartName -eq "LocalSystem" } | Select-Object Name, State, StartMode }; Severity = 'Info' }
+	'Windows Defender Status' = @{ Command = { Get-MpComputerStatus | fl }; Severity = 'Info' }
+	'Antivirus Software in Use' = @{ Command = { wmic /Namespace:\\root\SecurityCenter2 Path AntiVirusProduct Get displayname | Select-Object -Skip 1 }; Severity = 'Info' }
+	'Windows Hotfixes' = @{ Command = { Get-HotFix | select-object Hotfixid,description,installedon }; Severity = 'Info' }
+	# Another fallback Hotfixes: Get-WmiObject -query "select * from win32_quickfixengineering" | foreach {$_.hotfixid}
+	'Microsoft Edge Extensions' = @{ Command = { 
+        $extensionsPath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Extensions"
+        if (Test-Path $extensionsPath) {
+            Get-ChildItem -Path $extensionsPath | ForEach-Object {
+                $manifestPath = Join-Path $_.FullName "manifest.json"
+                if (Test-Path $manifestPath) {
+                    try {
+                        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+                        [PSCustomObject]@{
+                            Name        = $manifest.name
+                            Description = $manifest.description
+                            Version     = $manifest.version
+                            ID          = $_.Name
+                        }
+                    } catch {
+                        Write-Warning "Failed to parse manifest for extension ID $($_.Name)"
+                    }
+                }
+            }
+        } else {
+            Write-Warning "Edge extensions path not found."
+        }
+    }; Severity = 'Low' }
 }
 
 $user_actions = @{
-    'Current User' = 'whoami';
-    'User Domain' = '$env:USERDOMAIN';
-    'User Profile Path' = '$env:USERPROFILE';
-	'Local Users' = 'Get-LocalUser | Select-Object Name,Enabled,LastLogon';
-    'Logged in Users' = 'get-wmiobject -Class Win32_Computersystem | select Username';
-    'Credential Manager' = 'cmdkey /list';
-	'Stored Credentials' = 'vaultcmd /listcreds:"Windows Credentials" /all';
-    'User Autologon Registry Items' = 'Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinLogon" | select "Default*" | Select-Object';
-    'Local Groups' = 'Get-LocalGroup | Select-Object Name';
-    'Local Administrators' = 'Get-LocalGroupMember Administrators | Select-Object Name, PrincipalSource';
-    'User Directories' = 'Get-ChildItem C:\Users | Select-Object Name';
-	'Users SIDs' = 'Get-WmiObject -Class Win32_UserAccount';
-	'Local Password Policy' = 'net accounts';
-	'Orphaned User Accounts' = 'Get-LocalUser | Where-Object { $_.LastLogon -lt (Get-Date).AddDays(-90) }';
-	'Kerberos Tickets' = 'klist';
+    'Current User' = @{ Command = { whoami }; Severity = 'Info' }
+    'User Domain' = @{ Command = { $env:USERDOMAIN }; Severity = 'Info' }
+    'User Profile Path' = @{ Command = { $env:USERPROFILE }; Severity = 'Info' }
+	'Local Users' = @{ Command = { Get-LocalUser | Select-Object Name,Enabled,LastLogon }; Severity = 'Info' }
+	'Active User Sessions' = @{ Command = { query user /server:$env:COMPUTERNAME 2>&1 | Out-String }; Severity = 'Info' }
+    # Another Active Sessions: get-wmiobject -Class Win32_Computersystem | select Username
+    'Credential Manager' = @{ Command = { cmdkey /list | Out-String }; Severity = 'Low' }
+	'Stored Windows Credentials' = @{ Command = { vaultcmd /listcreds:"Windows Credentials" /all }; Severity = 'Low' }
+    'User Autologon Registry Items' = @{ Command = { Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinLogon" | select "Default*" | Select-Object }; Severity = 'Low' }
+    'Local Groups' = @{ Command = { Get-LocalGroup | Select-Object Name }; Severity = 'Info' }
+    'Local Administrators' = @{ Command = { Get-LocalGroupMember Administrators | Select-Object Name, PrincipalSource }; Severity = 'Info' }
+    'User Directories' = @{ Command = { Get-ChildItem C:\Users | Select-Object Name }; Severity = 'Info' }
+	'Users SIDs' = @{ Command = { Get-WmiObject -Class Win32_UserAccount }; Severity = 'Info' }
+	'Local Password Policy' = @{ Command = { net accounts }; Severity = 'Info' }
+	'Orphaned User Accounts' = @{ Command = { Get-LocalUser | Where-Object { $_.LastLogon -lt (Get-Date).AddDays(-90) }}; Severity = 'Medium' }
+	'Kerberos Tickets' = @{ Command = { klist }; Severity = 'Low' }
+	'Password Never Expires Accounts' = @{ Command = { 
+    Get-LocalUser | Where-Object { $_.PasswordNeverExpires -eq $true } | 
+    Select-Object Name, Enabled, LastLogon, PasswordNeverExpires
+	}; Severity = 'Medium' }
 }
 
 $priviliges_actions = @{
-	'User Privileges' = 'whoami /priv';
-    'Folders with Everyone Permissions' = 'Get-ChildItem "C:\Program Files\*", "C:\Program Files (x86)\*" | % { try { Get-Acl $_ -EA SilentlyContinue | Where {($_.Access|select -ExpandProperty IdentityReference) -match "Everyone"} } catch {}}';
-    'Folders with BUILTIN\User Permissions' = 'Get-ChildItem "C:\Program Files\*", "C:\Program Files (x86)\*" | % { try { Get-Acl $_ -EA SilentlyContinue | Where {($_.Access|select -ExpandProperty IdentityReference) -match "BUILTIN\Users"} } catch {}}';
-    'AlwaysInstallElevated Registry Setting' = 'Test-Path -Path "Registry::HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Installer"';
-	'User Account Control (UAC) Settings' = 'Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object -Property ConsentPromptBehaviorAdmin, EnableLUA';
-	'SAM Registry Key Permissions' = 'Get-Acl -Path "HKLM:\SAM"';
-	'SYSTEM Registry Key Permissions' = 'Get-Acl -Path "HKLM:\SYSTEM"';
-	'Main Folders Permissions' = 'Get-Acl -Path "C:\", "C:\Program Files\*", "C:\Program Files (x86)\*", "C:\ProgramData\"';
-	'Writeable Services' = 'Get-WmiObject Win32_Service | Where-Object { $_.StartName -like "*$env:USERNAME*" }';
-	'Unquoted Service Paths' = @"
-Get-WmiObject -Class Win32_Service -Property Name, PathName, StartMode | Where-Object { `$_`.PathName -notlike 'C:\Windows*' -and `$_`.PathName -notlike '\"*' } | Select-Object Name, StartMode, PathName
-"@; # As this command contains quotes, we need to use the at sign to get it to work
+	'User Privileges' = @{ Command = { whoami /priv }; Severity = 'Info' }
+    'Folders with Everyone Permissions' = @{ Command = { Get-ChildItem "C:\Program Files\*", "C:\Program Files (x86)\*" | % { try { Get-Acl $_ -EA SilentlyContinue | Where {($_.Access|select -ExpandProperty IdentityReference) -match "Everyone"} } catch {}} }; Severity = 'Low' }
+    'Folders with BUILTIN\User Permissions' = @{ Command = { Get-ChildItem "C:\Program Files\*", "C:\Program Files (x86)\*" | % { try { Get-Acl $_ -EA SilentlyContinue | Where {($_.Access|select -ExpandProperty IdentityReference) -match "BUILTIN\Users"} } catch {}} }; Severity = 'Low' }
+    'AlwaysInstallElevated Registry Setting' = @{ Command = { Test-Path -Path "Registry::HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Installer" }; Severity = 'High' }
+	'User Account Control (UAC) Settings' = @{ Command = { Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object -Property ConsentPromptBehaviorAdmin, EnableLUA }; Severity = 'Medium' }
+	'SAM Registry Key Permissions' = @{ Command = { Get-Acl -Path "HKLM:\SAM" }; Severity = 'Info' }
+	'SYSTEM Registry Key Permissions' = @{ Command = { Get-Acl -Path "HKLM:\SYSTEM" }; Severity = 'Info' }
+	'Main Folders Permissions' = @{ Command = { Get-Acl -Path "C:\", "C:\Program Files\*", "C:\Program Files (x86)\*", "C:\ProgramData\" }; Severity = 'Info' }
+	# Add check for writeable service binaries here
+	'Unquoted Service Paths' = @{ Command = { 
+    $services = Get-CimInstance -ClassName Win32_Service -Property Name, PathName, StartMode
+    $services | Where-Object { 
+        $_.PathName -and
+        $_.PathName -notmatch '^[''"]' -and
+        $_.PathName -match '\s' -and
+        $_.PathName -notlike '*C:\Windows*'
+    } | 
+    Select-Object Name, StartMode, PathName |
+    Sort-Object PathName
+	}; Severity = 'Info' }
+	'PowerShell Module Auto-Loading' = @{ Command = { 
+    Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds" -Name "DisableAutoConfigSource" -ErrorAction SilentlyContinue | Out-String
+	}; Severity = 'High' }
 }
 
 # Only run if part of a domain
 $domain_actions = @{
-	'Domain Name' = 'wmic computersystem get domain';
-	'Domain Password Policy' = 'net accounts /domain';
-	'Domain Admins' = 'net group "Domain Admins" /domain';
-	'Domain Computers' = 'net group "domain computers" /domain';
-	'Domain Controllers' = 'net group "Domain Controllers" /domain';
-	'GPO Settings' = 'gpresult /r';
-	# 'Domain Computers' = 'dsquery computer';
-	# 'Domain Servers' = 'net view /domain';
-	# 'Domain Controllers' = 'nltest /dclist:<DOMAIN>'
+	'Domain Name' = @{ Command = { wmic computersystem get domain }; Severity = 'Info' }
+	'Domain Password Policy' = @{ Command = { net accounts /domain }; Severity = 'Info' }
+	'Domain Admins' = @{ Command = { net group "Domain Admins" /domain }; Severity = 'Info' }
+	'Domain Computers' = @{ Command = { net group "domain computers" /domain }; Severity = 'Info' }
+	'Domain Controllers' = @{ Command = { net group "Domain Controllers" /domain }; Severity = 'Info' }
+	'GPO Settings' = @{ Command = { gpresult /r }; Severity = 'Info' }
+	# 'Domain Computers' = @{ Command = { dsquery computer }; Severity = 'Info' }
+	# 'Domain Servers' = @{ Command = { net view /domain }; Severity = 'Info' }
+	# 'Domain Controllers' = @{ Command = { nltest /dclist:<DOMAIN> }; Severity = 'Info' }
 }
 
 $azuread_actions = @{
-    'Azure AD Join Status' = 'dsregcmd /status';
-    'Azure AD Device ID' = '(dsregcmd /status | Select-String "DeviceId" | Out-String)';
-    'Azure AD Tenant Info' = '(dsregcmd /status | Select-String "TenantName" | Out-String)';
-    'Azure AD User Info' = '(dsregcmd /status | Select-String "Executing Account Name" | Out-String)';
+    'Azure AD Join Status' = @{ Command = { dsregcmd /status }; Severity = 'Info' }
+    'Azure AD Device ID' = @{ Command = { (dsregcmd /status | Select-String "DeviceId" | Out-String) }; Severity = 'Info' }
+    'Azure AD Tenant Info' = @{ Command = { (dsregcmd /status | Select-String "TenantName" | Out-String) }; Severity = 'Info' }
+    'Azure AD User Info' = @{ Command = { (dsregcmd /status | Select-String "Executing Account Name" | Out-String) }; Severity = 'Info' }
+	'Azure AD Connect Status' = @{ Command = { 
+		if (Get-Service -Name 'AzureADConnect' -ErrorAction SilentlyContinue) {
+			Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Azure AD Connect\*" | Out-String
+		} else { "Azure AD Connect not installed" }
+	}; Severity = 'Info' }
 }
 
 $network_actions = @{
-    'Network Adapters' = 'Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, MacAddress';
-    'IP Configuration' = 'Get-NetIPAddress';
-	'Network Information' = 'Get-NetIPConfiguration | Select-Object InterfaceAlias,InterfaceDescription,IPv4Address';
-	'DNS Servers' = 'Get-DnsClientServerAddress -AddressFamily IPv4';
-	'DNS Cache' = 'ipconfig /displaydns';
-	'ARP cache' = 'Get-NetNeighbor -AddressFamily IPv4 | Select-Object ifIndex,IPAddress,LinkLayerAddress,State';
-	'Routing Table' = 'Get-NetRoute -AddressFamily IPv4 | Select-Object DestinationPrefix,NextHop,RouteMetric,ifIndex';
-	'Network Connections' = 'netstat -ano';
-	'Open Ports' = 'Get-NetTCPConnection | Select-Object LocalAddress, LocalPort, State, OwningProcess';
-	'Processes With Listening Ports' = 'Get-Process -Id (Get-NetTCPConnection).OwningProcess | Select-Object ProcessName, Id';
-    'Firewall Rules' = 'Get-NetFirewallRule | Select-Object DisplayName,Enabled,Direction,Action';
-	'Wi-Fi Networks' = 'netsh wlan show profile'; # Can use netsh wlan show profile name="ProfileName" key=clear to show passwords
-	'IPv6 Configuration' = 'Get-NetIPConfiguration | Where-Object { $_.IPv6DefaultGateway -ne $null }';
-	'Hosts File' = 'Get-Content C:\WINDOWS\System32\drivers\etc\hosts';
+    'Network Adapters' = @{ Command = { Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, MacAddress }; Severity = 'Info' }
+    'IP Configuration' = @{ Command = { Get-NetIPAddress }; Severity = 'Info' }
+	'Network Information' = @{ Command = { Get-NetIPConfiguration | Select-Object InterfaceAlias,InterfaceDescription,IPv4Address }; Severity = 'Info' }
+	'DNS Servers' = @{ Command = { Get-DnsClientServerAddress -AddressFamily IPv4 }; Severity = 'Info' }
+	# Another DNS Cache: ipconfig /displaydns
+	'DNS Cache' = @{ Command = {  Get-DnsClientCache | Select-Object Entry, Name, Data | Format-Table -AutoSize | Out-String }; Severity = 'Low' }
+	'ARP cache' = @{ Command = { Get-NetNeighbor -AddressFamily IPv4 | Select-Object ifIndex,IPAddress,LinkLayerAddress,State }; Severity = 'Info' }
+	'Routing Table' = @{ Command = { Get-NetRoute -AddressFamily IPv4 | Select-Object DestinationPrefix,NextHop,RouteMetric,ifIndex }; Severity = 'Info' }
+	'Network Connections' = @{ Command = { netstat -ano }; Severity = 'Info' }
+	'Open Ports' = @{ Command = { Get-NetTCPConnection | Select-Object LocalAddress, LocalPort, State, OwningProcess }; Severity = 'Low' }
+	'Processes With Listening Ports' = @{ Command = { Get-Process -Id (Get-NetTCPConnection).OwningProcess | Select-Object ProcessName, Id }; Severity = 'Low' }
+    'Firewall Rules' = @{ Command = { Get-NetFirewallRule | Select-Object DisplayName,Enabled,Direction,Action }; Severity = 'Info' }
+	'Wi-Fi Networks' = @{ Command = { netsh wlan show profile }; Severity = 'Info' } # Can use netsh wlan show profile name="ProfileName" key=clear to show passwords
+	'Wi-Fi Passwords' = @{ Command = { $profiles = netsh wlan show profiles | Select-String "All User Profile" | ForEach-Object {
+        ($_ -split ":")[1].Trim()
+    }
+
+    foreach ($profile in $profiles) {
+        $details = netsh wlan show profile name="$profile" key=clear
+        $passwordLine = $details | Select-String "Key Content"
+        $password = if ($passwordLine) { ($passwordLine -split ":")[1].Trim() } else { "[No password found]" }
+
+        [PSCustomObject]@{
+            SSID     = $profile
+            Password = $password
+        }
+    }
+}; Severity = 'Low' } 
+	'IPv6 Configuration' = @{ Command = { Get-NetIPConfiguration | Where-Object { $_.IPv6DefaultGateway -ne $null } }; Severity = 'Info' }
+	'Hosts File' = @{ Command = { Get-Content C:\WINDOWS\System32\drivers\etc\hosts }; Severity = 'Info' }
+	'Firewall Disabled Rules' = @{ Command = { Get-NetFirewallRule | Where-Object { $_.Enabled -eq 'False' } | Select-Object DisplayName, Profile, Direction, Action }; Severity = 'Low' }
 }
 
 $storage_actions = @{
-	'Connected Drives' = 'Get-PSDrive | where {$_.Provider -like "Microsoft.PowerShell.Core\FileSystem"}';
-	'Local Shares' = 'net share';
+	'Connected Drives' = @{ Command = { Get-PSDrive | where {$_.Provider -like "Microsoft.PowerShell.Core\FileSystem"} }; Severity = 'Info' }
+	'Local Shares' = @{ Command = { net share }; Severity = 'Info' }
 }
 
 $extended_actions = @{
-	'Unattend and Sysprep files' = 'Get-Childitem –Path C:\ -Include *unattend*,*sysprep* -File -Recurse -ErrorAction SilentlyContinue | where {($_.Name -like "*.xml" -or $_.Name -like "*.txt" -or $_.Name -like "*.ini")}';
-	'Web.config files' = 'Get-Childitem –Path C:\ -Include web.config -File -Recurse -ErrorAction SilentlyContinue';
-	'Other interesting files' = 'Get-Childitem –Path C:\ -Include *password*,*cred*,*vnc* -File -Recurse -ErrorAction SilentlyContinue';
-	'Various config files' = 'Get-Childitem –Path C:\ -Include php.ini,httpd.conf,httpd-xampp.conf,my.ini,my.cnf -File -Recurse -ErrorAction SilentlyContinue';
-	'Word password in HKLM' = 'reg query HKLM /f password /t REG_SZ /s';
-	'Word password in HKCU' = 'reg query HKCU /f password /t REG_SZ /s';
-	'Files containing word "passwords"' = 'Get-ChildItem c:\* -include *.xml,*.ini,*.txt,*.config -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.PSPath -notlike "*C:\temp*" -and $_.PSParentPath -notlike "*Reference Assemblies*" -and $_.PSParentPath -notlike "*Windows Kits*"}| Select-String -Pattern "password"';
+	'Unattend and Sysprep files' = @{ Command = { Get-Childitem –Path C:\ -Include *unattend*,*sysprep* -File -Recurse -ErrorAction SilentlyContinue | where {($_.Name -like "*.xml" -or $_.Name -like "*.txt" -or $_.Name -like "*.ini")} }; Severity = 'Medium' }
+	'Web.config files' = @{ Command = { Get-Childitem –Path C:\ -Include web.config -File -Recurse -ErrorAction SilentlyContinue }; Severity = 'Low' }
+	'Other interesting files' = @{ Command = { Get-Childitem –Path C:\ -Include *password*,*cred*,*vnc* -File -Recurse -ErrorAction SilentlyContinue }; Severity = 'Medium' }
+	'Various config files' = @{ Command = { Get-Childitem –Path C:\ -Include php.ini,httpd.conf,httpd-xampp.conf,my.ini,my.cnf -File -Recurse -ErrorAction SilentlyContinue }; Severity = 'Low' }
+	'Word password in HKLM' = @{ Command = { reg query HKLM /f password /t REG_SZ /s }; Severity = 'Medium' }
+	'Word password in HKCU' = @{ Command = { reg query HKCU /f password /t REG_SZ /s }; Severity = 'Medium' }
+	'Files containing word "password"' = @{ Command = { Get-ChildItem c:\* -include *.xml,*.ini,*.txt,*.config -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.PSPath -notlike "*C:\temp*" -and $_.PSParentPath -notlike "*Reference Assemblies*" -and $_.PSParentPath -notlike "*Windows Kits*"}| Select-String -Pattern "password" }; Severity = 'Low' }
 }
 
 $admin_actions = @{
-	'BitLocker Status' = 'Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, EncryptionMethod';
-	'Windows Defender Exclusions' = 'Get-MpPreference | Select-Object -Property ExclusionPath -ExpandProperty ExclusionPath';
-	'Shadow Copies Enumeration' = 'vssadmin list shadows';
-	'Audit Policy' = 'auditpol /get /category:*';
-	'SAM File Permissions' = 'Get-Acl -Path "C:\Windows\System32\config\SAM"';
-	'Potential DLL Hijacking' = 'Get-ChildItem -Path "C:\Program Files" -Recurse -Include *.dll | ForEach-Object { Get-Acl $_.FullName } | Where-Object { $_.AccessToString -like "*Everyone*" }';
+	'BitLocker Status' = @{ Command = { Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, EncryptionMethod }; Severity = 'Medium' }
+	'Windows Defender Exclusions' = @{ Command = { Get-MpPreference | Select-Object -Property ExclusionPath -ExpandProperty ExclusionPath }; Severity = 'High' }
+	'Shadow Copies Enumeration' = @{ Command = { vssadmin list shadows }; Severity = 'Medium' }
+	'Audit Policy' = @{ Command = { auditpol /get /category:* }; Severity = 'Info' }
+	'SAM File Permissions' = @{ Command = { Get-Acl -Path "C:\Windows\System32\config\SAM" }; Severity = 'Info' }
+	'Potential DLL Hijacking' = @{ Command = { Get-ChildItem -Path "C:\Program Files" -Recurse -Include *.dll | ForEach-Object { Get-Acl $_.FullName } | Where-Object { $_.AccessToString -like "*Everyone*" } }; Severity = 'High' }
+	'Windows Features Enabled' = @{ Command = { 
+    Get-WindowsOptionalFeature -Online | Where-Object { $_.State -eq 'Enabled' } | 
+    Select-Object FeatureName,State
+	}; Severity = 'Info' }
+	'Windows Subsystem for Linux (WSL)' = @{ Command = {  Get-WindowsOptionalFeature -Online -FeatureName *Linux* | Select-Object FeatureName,State | Out-String }; Severity = 'Low' }
+	'Event Log Configurations' = @{ Command = { 
+    Get-WinEvent -ListLog * | 
+    Where-Object { $_.IsEnabled -eq $true } | 
+    Select-Object LogName, IsEnabled, MaximumSizeInBytes, RecordCount | Format-Table -AutoSize | Out-String
+	}; Severity = 'Low' }
+	'Security Events (Last 24h)' = @{ Command = { 
+		$startTime = (Get-Date).AddDays(-1)
+		$filter = @{
+			LogName   = 'Security'
+			StartTime = $startTime
+		}
+
+		try {
+			Get-WinEvent -FilterHashtable $filter -MaxEvents 200 | Select-Object TimeCreated, Id, LevelDisplayName, Message
+		} catch {
+			Write-Warning "Unable to retrieve security events: $_"
+		}
+	}; Severity = 'Medium' }
 }
+# End actions
 
 # Ensure output directory exists
 $outputDir = Split-Path -Parent $OutputFile
@@ -272,31 +364,42 @@ function Run-Actions {
     )
     foreach ($actionName in $ActionsGroup.Keys) {
 
-        # Create a sanitized ID for HTML navigation
-        $sanitizedId = ($actionName -replace '[^a-zA-Z0-9]','').ToLower()
-		$command = $ActionsGroup[$actionName]
+        $action = $ActionsGroup[$actionName]  # Get the entire action object
+        $command = $action.Command            # Extract the command
+        $severity = $action.Severity          # Extract the severity
+        $sanitizedId = ($actionName -replace '[^a-zA-Z0-9]','').ToLower()  # Create a sanitized ID for HTML navigation
         
         try {
             Write-Host "[-] Checking: $actionName"
-            $output = Invoke-Expression $command 2>&1
-            $output = $output | Out-String
+            $output = & $command | Out-String
+			
+			# Record results
             $script:executedChecks++
             
             # Store results for JSON/CSV output
             $script:results += [PSCustomObject]@{
                 Category = $ActionsGroupName
                 Check    = $actionName
-                Command  = $command
+                Command  = if ($command -is [scriptblock]) { $command.ToString() } else { $command }
                 Output   = $output
                 Status   = "Success"
+				Severity = $severity
 				Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
             }
 			$script:results += $result
             
+			$severityClass = "severity-$($action.Severity.ToLower())"
+			$isEmptyResult = [string]::IsNullOrWhiteSpace($output) -or $output -match "^\s*$"
+            $emptyNote = if ($isEmptyResult) { "<span class='status-note'><i><b>Note:</b> No results returned - as the check seemed to run successfully, this may simply indicate that nothing was found.</i></span>" } else { "" }
+			
             Add-Content -Path $FilePath -Value @"
 <div id="$sanitizedId" class="report-section">
     <div class="right-content">
-        <h2>$actionName</h2>
+		<div class="action-title-status">
+			<h2>$actionName <span class="badge $severityClass">$severity</span></h2>
+			<div class="statusdiv"><span class="status">Status: </span><span class="status-ok">Successfully Checked</span></div>
+		</div>
+		$emptyNote
         <pre>$([System.Web.HttpUtility]::HtmlEncode($output))</pre>
     </div>
 </div>
@@ -309,22 +412,27 @@ function Run-Actions {
             $script:results += [PSCustomObject]@{
                 Category = $ActionsGroupName
                 Check    = $actionName
-                Command  = $command
+                Command  = if ($command -is [scriptblock]) { $command.ToString() } else { $command }
                 Output   = $errorMsg
                 Status   = "Failed"
+				Severity = $action.Severity
 				Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
             }
 			$script:results += $result
             
+			$severityClass = "severity-$($action.Severity.ToLower())"
+			
             Add-Content -Path $OutputFile -Value @"
 <div id="$sanitizedId" class="report-section">
     <div class="right-content">
-        <h2>$actionName</h2>
-        <pre class="error">$([System.Web.HttpUtility]::HtmlEncode($errorMsg))</pre>
+		<div class="action-title-status">
+			<h2>$actionName <span class="badge $severityClass">$severity</span></h2>
+			<div class="statusdiv"><span class="status">Status: </span><span class="status-failed">Check Failed</span></div>
+		</div>
+        <pre>$([System.Web.HttpUtility]::HtmlEncode($output))</pre>
     </div>
 </div>
 "@
-
         }
     }
 }
@@ -527,6 +635,66 @@ Add-Content -Path $OutputFile -Value @"
         font-weight: 400;
         font-size: 1.5rem;
     }
+	
+	 /* Status Badges */
+    .status-ok {
+        background-color: #28a745;
+        color: white;
+		border-radius: 0px 4px 4px 0px;
+        font-size: 0.9em;
+		color: white;
+		display: inline-block;
+		text-align: right;
+        font-weight: 500;
+		margin-bottom: 15px;
+		padding: 4px 8px;
+    }
+    
+    .status-failed {
+        background-color: #dc3545;
+        color: white;
+		border-radius: 0px 4px 4px 0px;
+        font-size: 0.9em;
+		color: white;
+		display: inline-block;
+		text-align: right;
+        font-weight: 500;
+		margin-bottom: 15px;
+		padding: 4px 8px;
+    }
+    
+    .status-note {
+        color: #6c757d;
+        font-size: 0.9em;
+		display: block;
+        margin-bottom: 15px;
+    }
+    
+    .status {
+        margin-bottom: 15px;
+		display: inline-block;
+		padding: 4px 8px;
+        border-radius: 4px 0px 0px 4px;
+        font-size: 0.9rem;
+        font-weight: 500;
+		background-color: #d9d9d9;
+    }
+	
+	.action-title-status {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
+	action-title-status.h2 {
+		flex: 1;
+		display: block;
+	}
+	
+	.statusdiv {
+		flex: 2;
+		text-align: right;
+	}
     
     pre {
         background: var(--box);
@@ -560,6 +728,52 @@ Add-Content -Path $OutputFile -Value @"
     .badge-user { background: var(--warning); }
     .badge-domain { background: var(--primary); }
     .badge-workgroup { background: #6c757d; }
+	
+	/* Severity Badges */
+    .severity-critical {
+        background-color: #A13FA0;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
+    
+    .severity-high {
+        background-color: #dc3545;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
+    
+    .severity-medium {
+        background-color: #fd7e14;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
+    
+    .severity-low {
+        background-color: #28a745;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
+	
+	.severity-info {
+        background-color: #6BD2E3;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
     
     /* Responsive Design */
     @media (max-width: 768px) {
@@ -623,7 +837,7 @@ else {
     [bool]$azuread = $false
 }
 
-# Prepare standard actions
+# Prepare Actions HTML report
 Add-Content -Path $OutputFile -Value "<div class='nav-section'><h3>&#128187; System Information:</h3>" # System
 Prepare-Actions -ActionsGroup $system_actions -FilePath $OutputFile
 Add-Content -Path $OutputFile -Value "</div><div class='nav-section'><h3>&#128100; Users&#47;Accounts:</h3>" # Accounts
@@ -724,11 +938,6 @@ if ($addomain -eq $true) {
 
 # This closes main-content, sidebar, and container
 Add-Content -Path $OutputFile -Value "</div></div></div></div>"
-
-<# Test only (generate errors)
-$script:ActionsGroupName = 'Test Checks'
-Run-Actions -ActionsGroup $test_actions -FilePath $OutputFile
-#>
 
 # Run standard actions and print output
 $script:ActionsGroupName = 'System Information'
@@ -837,12 +1046,26 @@ if (($successCount + $failedCount) -ne $script:executedChecks) {
 }
 
 Write-Host ""
-Write-Host "[i] Execution Summary:" -ForegroundColor Cyan
+Write-Host "[i] Execution Summary:"
 Write-Host "[-] Total checks executed: $script:executedChecks"
 Write-Host "[-] Successful checks: $successCount"
-Write-Host "[-] Failed checks: $failedCount" -ForegroundColor $(if ($failedCount -gt 0) { 'Red' } else { 'Green' })
-Write-Host "[-] HTML report generated: $OutputFile"
+Write-Host "[-] Failed checks: $failedCount" -ForegroundColor $(if ($failedCount -gt 0) { 'Red' } else { 'White' })
 
+$critCount = ($script:results | Where-Object { $_.Severity -eq 'Critical' }).Count
+$highCount = ($script:results | Where-Object { $_.Severity -eq 'High' }).Count
+$mediumCount = ($script:results | Where-Object { $_.Severity -eq 'Medium' }).Count
+$lowCount = ($script:results | Where-Object { $_.Severity -eq 'Low' }).Count
+$infoCount = ($script:results | Where-Object { $_.Severity -eq 'Info' }).Count
+
+Write-Host "`n[!] Risk Summary:"
+Write-Host "[-] Critical Risk Findings: $critCount" -ForegroundColor Magenta
+Write-Host "[-] High Risk Findings: $highCount" -ForegroundColor Red
+Write-Host "[-] Medium Risk Findings: $mediumCount" -ForegroundColor Yellow
+Write-Host "[-] Low Risk Findings: $lowCount" -ForegroundColor Green
+Write-Host "[-] Informational Findings: $infoCount" -ForegroundColor Cyan
+
+Write-Host "`n[i] Report Files:"
+Write-Host "[-] HTML report generated: $OutputFile"
 Write-Host "[-] JSON report generated: $OutputFileJSON"
 Write-Host "[-] CSV report generated: $OutputFileCSV"
 
